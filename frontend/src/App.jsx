@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import "./App.css";
 
-const API_URL = "http://localhost:5000";
+const API_URL = "https://shree-balaji-pujan-samagri-sikar-backend.onrender.com";
 
 const products = [
   { id: 1, name: "पूजा दीपक", english: "Premium Puja Diya", price: 50, icon: "🪔" },
