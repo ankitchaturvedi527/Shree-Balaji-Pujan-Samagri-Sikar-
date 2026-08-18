@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
+import QRCode from "qrcode";
 import "./App.css";
 
-const API_URL = "https://shree-balaji-pujan-samagri-sikar-backend.onrender.com";
+const API_URL =
+  "https://shree-balaji-pujan-samagri-sikar-backend.onrender.com";
 
 const products = [
   { id: 1, name: "पूजा दीपक", english: "Premium Puja Diya", price: 50, icon: "🪔" },
@@ -59,6 +61,7 @@ function App() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [upiQR, setUpiQR] = useState("");
   const [message, setMessage] = useState("");
 
   const filteredProducts = useMemo(() => {
@@ -119,7 +122,7 @@ function App() {
     0
   );
 
-  // Save order to backend
+  // CREATE ORDER
   const createOrder = async () => {
     if (cart.length === 0) {
       alert("Cart empty hai.");
@@ -149,21 +152,55 @@ function App() {
         throw new Error(data.message || "Order create failed");
       }
 
-      setMessage(`✅ Order #${data.orderId} created successfully`);
+      setMessage(
+        `✅ Order #${data.orderId} created successfully`
+      );
 
       return data.orderId;
     } catch (error) {
-      console.error(error);
+      console.error("Create Order Error:", error);
+
       alert(
-        "Backend se connection nahi ho raha. Check karo backend port 5000 par running hai."
+        "Order create nahi hua. Backend connection check karo."
       );
+
       return null;
     } finally {
       setLoading(false);
     }
   };
 
-  // UPI payment app open
+  // ORDER HISTORY
+  const loadOrderHistory = async () => {
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${API_URL}/api/orders`);
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "History load failed");
+      }
+
+      const orderList = Array.isArray(data)
+        ? data
+        : data.orders || [];
+
+      setOrders(orderList);
+      setHistoryOpen(true);
+    } catch (error) {
+      console.error("History Error:", error);
+
+      alert(
+        "Order history load nahi ho rahi. Backend check karo."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // UPI PAYMENT
   const handleUPIPayment = async () => {
     if (cart.length === 0) {
       alert("Cart empty hai.");
@@ -174,38 +211,58 @@ function App() {
 
     if (!orderId) return;
 
+    try {
+      const upiId = "8441907320@ybl";
+
+      const upiUrl =
+        `upi://pay?pa=${encodeURIComponent(upiId)}` +
+        `&pn=${encodeURIComponent(
+          "Shree Balaji Pujan Samagri"
+        )}` +
+        `&am=${Number(cartTotal).toFixed(2)}` +
+        `&cu=INR` +
+        `&tn=${encodeURIComponent(`Order #${orderId}`)}`;
+
+      // Generate QR
+      const qrCodeDataUrl = await QRCode.toDataURL(upiUrl);
+
+      setUpiQR(qrCodeDataUrl);
+
+      /*
+       * QR ko pehle screen par dikhayenge.
+       * Direct window.location karne se desktop browser
+       * par QR screen immediately disappear ho sakti hai.
+       *
+       * Mobile par "Open UPI App" button se UPI app open hoga.
+       */
+    } catch (error) {
+      console.error("UPI QR Error:", error);
+
+      alert("UPI QR Code generate nahi ho paya.");
+    }
+  };
+
+  // OPEN UPI APP
+  const openUPIApp = () => {
     const upiId = "8441907320@ybl";
 
     const upiUrl =
       `upi://pay?pa=${encodeURIComponent(upiId)}` +
-      `&pn=${encodeURIComponent("Shree Balaji Pujan Samagri")}` +
-      `&am=${cartTotal}` +
-      `&cu=INR` +
-      `&tn=${encodeURIComponent(`Order #${orderId}`)}`;
+      `&pn=${encodeURIComponent(
+        "Shree Balaji Pujan Samagri"
+      )}` +
+      `&am=${Number(cartTotal).toFixed(2)}` +
+      `&cu=INR`;
 
     window.location.href = upiUrl;
   };
 
-  // Fetch order history
-  const loadOrderHistory = async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/orders`);
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || "History load failed");
-      }
-
-      setOrders(data.orders || []);
-      setHistoryOpen(true);
-    } catch (error) {
-      console.error(error);
-      alert("Order history load nahi ho rahi. Backend check karo.");
-    }
-  };
-
+  // WHATSAPP ORDER
   const handleWhatsAppOrder = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0) {
+      alert("Cart empty hai.");
+      return;
+    }
 
     const orderId = await createOrder();
 
@@ -220,7 +277,7 @@ function App() {
       )
       .join("\n");
 
-    const message =
+    const whatsappMessage =
       `🪔 Shree Balaji Pujan Samagri Order\n\n` +
       `Order ID: #${orderId}\n\n` +
       `${orderText}\n\n` +
@@ -230,13 +287,19 @@ function App() {
 
     const whatsappUrl =
       `https://wa.me/${shopWhatsAppNumber}?text=` +
-      encodeURIComponent(message);
+      encodeURIComponent(whatsappMessage);
 
-    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+    window.open(
+      whatsappUrl,
+      "_blank",
+      "noopener,noreferrer"
+    );
   };
 
   return (
     <div className="app">
+
+      {/* HEADER */}
       <header className="header">
         <div className="brand">
           <div className="brand-icon">🪔</div>
@@ -247,11 +310,17 @@ function App() {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: "10px" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: "10px",
+          }}
+        >
           <button
             className="cart"
             type="button"
             onClick={loadOrderHistory}
+            disabled={loading}
           >
             📜 History
           </button>
@@ -266,6 +335,7 @@ function App() {
         </div>
       </header>
 
+      {/* MESSAGE */}
       {message && (
         <div
           style={{
@@ -280,6 +350,7 @@ function App() {
         </div>
       )}
 
+      {/* HERO */}
       <section className="hero">
         <div className="hero-content">
           <p className="welcome">🙏 जय श्री राम 🙏</p>
@@ -302,7 +373,9 @@ function App() {
             onClick={() =>
               document
                 .getElementById("products")
-                ?.scrollIntoView({ behavior: "smooth" })
+                ?.scrollIntoView({
+                  behavior: "smooth",
+                })
             }
           >
             🛍️ खरीदारी शुरू करें
@@ -312,10 +385,17 @@ function App() {
         <div className="hero-diya">🪔</div>
       </section>
 
-      <section className="shop-section" id="products">
+      {/* PRODUCTS */}
+      <section
+        className="shop-section"
+        id="products"
+      >
         <div className="section-heading">
           <div>
-            <p className="small-title">OUR COLLECTION</p>
+            <p className="small-title">
+              OUR COLLECTION
+            </p>
+
             <h2>पूजा सामग्री</h2>
           </div>
 
@@ -331,7 +411,9 @@ function App() {
             type="text"
             placeholder="पूजा सामग्री खोजें..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) =>
+              setSearch(e.target.value)
+            }
           />
 
           {search && (
@@ -347,7 +429,10 @@ function App() {
 
         <div className="products-grid">
           {filteredProducts.map((product) => (
-            <div className="product-card" key={product.id}>
+            <div
+              className="product-card"
+              key={product.id}
+            >
               <button
                 className="heart"
                 type="button"
@@ -356,19 +441,26 @@ function App() {
                 ♡
               </button>
 
-              <div className="product-icon">{product.icon}</div>
+              <div className="product-icon">
+                {product.icon}
+              </div>
 
               <div className="product-info">
                 <h3>{product.name}</h3>
+
                 <p>{product.english}</p>
 
                 <div className="product-bottom">
-                  <strong>₹{product.price}</strong>
+                  <strong>
+                    ₹{product.price}
+                  </strong>
 
                   <button
                     className="add-button"
                     type="button"
-                    onClick={() => addToCart(product)}
+                    onClick={() =>
+                      addToCart(product)
+                    }
                   >
                     + Add
                   </button>
@@ -385,12 +477,15 @@ function App() {
         )}
       </section>
 
+      {/* FOOTER */}
       <footer className="contact-footer">
         <div className="contact-footer-content">
           <div className="contact-business">
             <div className="footer-icon">🪔</div>
 
-            <h2>Shree Balaji Pujan Samagri</h2>
+            <h2>
+              Shree Balaji Pujan Samagri
+            </h2>
 
             <p className="footer-location">
               📍 Sikar, Rajasthan
@@ -430,11 +525,13 @@ function App() {
           <p>🙏 जय श्री राम 🙏</p>
 
           <p>
-            © 2026 Shree Balaji Pujan Samagri. All Rights Reserved.
+            © 2026 Shree Balaji Pujan Samagri.
+            All Rights Reserved.
           </p>
         </div>
       </footer>
 
+      {/* CART BAR */}
       {cart.length > 0 && (
         <div className="cart-bar">
           <div>
@@ -442,7 +539,8 @@ function App() {
           </div>
 
           <div>
-            Total: <strong>₹{cartTotal}</strong>
+            Total:{" "}
+            <strong>₹{cartTotal}</strong>
           </div>
 
           <button
@@ -462,7 +560,9 @@ function App() {
         >
           <div
             className="cart-panel"
-            onClick={(event) => event.stopPropagation()}
+            onClick={(event) =>
+              event.stopPropagation()
+            }
           >
             <div className="cart-header">
               <h2>🛒 Your Cart</h2>
@@ -470,7 +570,9 @@ function App() {
               <button
                 className="close-cart"
                 type="button"
-                onClick={() => setCartOpen(false)}
+                onClick={() =>
+                  setCartOpen(false)
+                }
               >
                 ✕
               </button>
@@ -479,38 +581,56 @@ function App() {
             {cart.length === 0 ? (
               <div className="empty-cart">
                 <div>🛒</div>
+
                 <h3>Your cart is empty</h3>
-                <p>पूजा सामग्री cart में add करें।</p>
+
+                <p>
+                  पूजा सामग्री cart में add करें।
+                </p>
               </div>
             ) : (
               <>
                 <div className="cart-items">
                   {cart.map((item) => (
-                    <div className="cart-item" key={item.id}>
+                    <div
+                      className="cart-item"
+                      key={item.id}
+                    >
                       <div className="cart-item-icon">
                         {item.icon}
                       </div>
 
                       <div className="cart-item-info">
                         <h3>{item.name}</h3>
-                        <p>₹{item.price} each</p>
+
+                        <p>
+                          ₹{item.price} each
+                        </p>
 
                         <div className="quantity">
                           <button
                             type="button"
                             onClick={() =>
-                              updateQuantity(item.id, -1)
+                              updateQuantity(
+                                item.id,
+                                -1
+                              )
                             }
                           >
                             −
                           </button>
 
-                          <span>{item.quantity}</span>
+                          <span>
+                            {item.quantity}
+                          </span>
 
                           <button
                             type="button"
                             onClick={() =>
-                              updateQuantity(item.id, 1)
+                              updateQuantity(
+                                item.id,
+                                1
+                              )
                             }
                           >
                             +
@@ -520,14 +640,18 @@ function App() {
 
                       <div className="cart-item-total">
                         <strong>
-                          ₹{item.price * item.quantity}
+                          ₹
+                          {item.price *
+                            item.quantity}
                         </strong>
 
                         <button
                           className="remove-btn"
                           type="button"
                           onClick={() =>
-                            removeFromCart(item.id)
+                            removeFromCart(
+                              item.id
+                            )
                           }
                         >
                           Remove
@@ -539,9 +663,13 @@ function App() {
 
                 <div className="cart-total">
                   <span>Total</span>
-                  <strong>₹{cartTotal}</strong>
+
+                  <strong>
+                    ₹{cartTotal}
+                  </strong>
                 </div>
 
+                {/* UPI */}
                 <button
                   className="whatsapp-order"
                   type="button"
@@ -553,14 +681,84 @@ function App() {
                     : `💳 Pay ₹${cartTotal} by UPI`}
                 </button>
 
+                {/* QR */}
+                {upiQR && (
+                  <div
+                    style={{
+                      textAlign: "center",
+                      marginTop: "15px",
+                      padding: "15px",
+                      border: "1px solid #ddd",
+                      borderRadius: "12px",
+                      background: "#fff",
+                    }}
+                  >
+                    <h3>📱 Scan & Pay</h3>
+
+                    <p>
+                      UPI ID:{" "}
+                      <strong>
+                        8441907320@ybl
+                      </strong>
+                    </p>
+
+                    <img
+                      src={upiQR}
+                      alt="UPI Payment QR Code"
+                      style={{
+                        width: "220px",
+                        height: "220px",
+                        maxWidth: "100%",
+                      }}
+                    />
+
+                    <p
+                      style={{
+                        marginTop: "10px",
+                      }}
+                    >
+                      Amount:{" "}
+                      <strong>
+                        ₹{cartTotal}
+                      </strong>
+                    </p>
+
+                    <p
+                      style={{
+                        fontSize: "13px",
+                        color: "#666",
+                      }}
+                    >
+                      Google Pay / PhonePe /
+                      Paytm से QR scan करें
+                    </p>
+
+                    <button
+                      type="button"
+                      className="whatsapp-order"
+                      onClick={openUPIApp}
+                      style={{
+                        marginTop: "10px",
+                      }}
+                    >
+                      📱 Open UPI App
+                    </button>
+                  </div>
+                )}
+
+                {/* WHATSAPP */}
                 <button
-                  className="whatsapp-order"
                   type="button"
-                  onClick={handleWhatsAppOrder}
+                  className="whatsapp-order"
+                  onClick={
+                    handleWhatsAppOrder
+                  }
                   disabled={loading}
-                  style={{ marginTop: "10px" }}
+                  style={{
+                    marginTop: "10px",
+                  }}
                 >
-                  💬 Order on WhatsApp
+                  📲 Order on WhatsApp
                 </button>
               </>
             )}
@@ -572,11 +770,15 @@ function App() {
       {historyOpen && (
         <div
           className="cart-overlay"
-          onClick={() => setHistoryOpen(false)}
+          onClick={() =>
+            setHistoryOpen(false)
+          }
         >
           <div
             className="cart-panel"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) =>
+              e.stopPropagation()
+            }
           >
             <div className="cart-header">
               <h2>📜 Order History</h2>
@@ -584,7 +786,9 @@ function App() {
               <button
                 className="close-cart"
                 type="button"
-                onClick={() => setHistoryOpen(false)}
+                onClick={() =>
+                  setHistoryOpen(false)
+                }
               >
                 ✕
               </button>
@@ -593,8 +797,12 @@ function App() {
             {orders.length === 0 ? (
               <div className="empty-cart">
                 <div>📦</div>
+
                 <h3>No orders yet</h3>
-                <p>अभी कोई order नहीं है।</p>
+
+                <p>
+                  अभी कोई order नहीं है।
+                </p>
               </div>
             ) : (
               <div className="cart-items">
@@ -612,31 +820,49 @@ function App() {
                     </h3>
 
                     <p>
-                      💰 Total: <strong>₹{order.total}</strong>
+                      💰 Total:{" "}
+                      <strong>
+                        ₹{order.total}
+                      </strong>
                     </p>
 
                     <p>
                       💳 Payment:{" "}
-                      <strong>{order.paymentMethod}</strong>
+                      <strong>
+                        {order.paymentMethod ||
+                          "UPI"}
+                      </strong>
                     </p>
 
                     <p>
                       Status:{" "}
-                      <strong>{order.paymentStatus}</strong>
+                      <strong>
+                        {order.paymentStatus ||
+                          order.status ||
+                          "PENDING"}
+                      </strong>
                     </p>
 
                     <p>
-                      📅 {order.createdAt}
+                      📅{" "}
+                      {order.createdAt ||
+                        "N/A"}
                     </p>
 
                     <hr />
 
-                    {order.items.map((item) => (
-                      <p key={item.id}>
-                        {item.icon} {item.name} ×{" "}
-                        {item.quantity}
-                      </p>
-                    ))}
+                    {Array.isArray(
+                      order.items
+                    ) &&
+                      order.items.map(
+                        (item) => (
+                          <p key={item.id}>
+                            {item.icon}{" "}
+                            {item.name} ×{" "}
+                            {item.quantity}
+                          </p>
+                        )
+                      )}
                   </div>
                 ))}
               </div>
