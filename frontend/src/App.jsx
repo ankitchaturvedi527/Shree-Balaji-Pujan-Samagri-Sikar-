@@ -214,7 +214,11 @@ function App() {
     try {
       const upiId = "8441907320@ybl";
 
-      const upiUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&am=${Number(cartTotal).toFixed(2)}&cu=INR`;
+      const upiUrl =
+  `upi://pay?pa=${encodeURIComponent(upiId)}` +
+  `&pn=${encodeURIComponent("Shree Balaji Pujan Samagri")}` +
+  `&am=${Number(cartTotal).toFixed(2)}` +
+  `&cu=INR`;
 
       // Generate QR
       const qrCodeDataUrl = await QRCode.toDataURL(upiUrl);
